@@ -174,6 +174,15 @@ class NOTTelescopePar(TelescopePar):
                                               latitude=loc.lat.to(units.deg).value,
                                               elevation=loc.height.to(units.m).value,
                                               diameter=2.56)
+        
+class D154TelescopePar(TelescopePar):
+    def __init__(self):
+        loc = EarthLocation.of_site('La Silla Observatory')
+        super(D154TelescopePar, self).__init__(name='D154',
+                                              longitude=loc.lon.to(units.deg).value,
+                                              latitude=loc.lat.to(units.deg).value,
+                                              elevation=loc.height.to(units.m).value,
+                                              diameter=1.54)
 
 class P200TelescopePar(TelescopePar):
     def __init__(self):
