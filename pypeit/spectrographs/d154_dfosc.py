@@ -29,14 +29,13 @@ class DFOSCSpectrograph(spectrograph.Spectrograph):
     header_name = 'DFOSC_FASU'
     pypeline = 'MultiSlit'
     supported = True
-    comment = 'For horizontal slits only. Grisms 3, 5, 7, 9, 10, 11, 13, 14, 15, 16 for DFOSC, need to add 14, 15, 16 to solution list'
+    comment = 'For horizontal slits only. Grisms 3, 5, 6, 7, 8, 14, 15, for DFOSC'
 
     def get_detector_par(self, det, hdu=None):
         """
         Return metadata for the selected detector.
 
-        Detector data from `here
-        <http://www.not.iac.es/instruments/detectors/CCD14/>`__.
+        Detector is CCD3 from E2V.
 
         .. warning::
 
@@ -65,14 +64,15 @@ class DFOSCSpectrograph(spectrograph.Spectrograph):
             ronoise = None
         else:
             binning = self.get_meta_value(self.get_headarr(hdu), 'binning')
-            gain = np.atleast_1d(hdu[1].header['GAIN'])  # e-/ADU
-            ronoise = np.atleast_1d(hdu[1].header['RDNOISE'])  # e-
+            #gain = np.atleast_1d(hdu[1].header['GAIN'])  # e-/ADU
+            #ronoise = np.atleast_1d(hdu[1].header['RDNOISE'])  # e-
 
-        # Detector 1
+        # Detector 1 
+        # TODO: flip axis? dfosc uses vertical slits
         detector_dict = dict(
             binning         = binning,
             det             = 1,
-            dataext         = 1,
+            dataext         = 0,
             specaxis        = 0,
             specflip        = True,
             spatflip        = False,
@@ -87,8 +87,8 @@ class DFOSCSpectrograph(spectrograph.Spectrograph):
             datasec         = np.atleast_1d('[:,{}:{}]'.format(1, 2148)),  # Unbinned
             oscansec        = None,
             numamplifiers   = 1,
-            gain            = gain,     # e-/ADU
-            ronoise         = ronoise   # e-
+            gain            = np.atleast_1d(1.8),     # e-/ADU   This is not the correct value, test, and update with flats
+            ronoise         = np.atleast_1d(9.0)   # e-
         )
 
 #        # Parse datasec, oscancsec from the header
@@ -301,30 +301,22 @@ class DFOSCSpectrograph(spectrograph.Spectrograph):
 
         # Wavelength calibrations
         if self.get_meta_value(scifile, 'dispname') == 'Grism_#3':
-            par['calibrations']['wavelengths']['reid_arxiv'] = 'not_alfosc_grism3.fits'
-        elif self.get_meta_value(scifile, 'dispname') == 'Grism_#4':
-            par['calibrations']['wavelengths']['reid_arxiv'] = 'not_alfosc_grism4.fits'
-            par['calibrations']['wavelengths']['lamps'] = ['HgI']
+            par['calibrations']['wavelengths']['reid_arxiv'] = 'd154_dfosc_grism3.fits'
+        #elif self.get_meta_value(scifile, 'dispname') == 'Grism_#4':
+        #    par['calibrations']['wavelengths']['reid_arxiv'] = 'not_alfosc_grism4.fits'
+        #    par['calibrations']['wavelengths']['lamps'] = ['HgI']
         elif self.get_meta_value(scifile, 'dispname') == 'Grism_#5':
-            par['calibrations']['wavelengths']['reid_arxiv'] = 'not_alfosc_grism5.fits'
+            par['calibrations']['wavelengths']['reid_arxiv'] = 'd154_dfosc_grism5.fits'
+        elif self.get_meta_value(scifile, 'dispname') == 'Grism_#6':
+            par['calibrations']['wavelengths']['reid_arxiv'] = 'd154_dfosc_grism6.fits'
         elif self.get_meta_value(scifile, 'dispname') == 'Grism_#7':
-            par['calibrations']['wavelengths']['reid_arxiv'] = 'not_alfosc_grism7.fits'
+            par['calibrations']['wavelengths']['reid_arxiv'] = 'd154_dfosc_grism7.fits'
         elif self.get_meta_value(scifile, 'dispname') == 'Grism_#8':
-            par['calibrations']['wavelengths']['reid_arxiv'] = 'not_alfosc_grism8.fits'
-        elif self.get_meta_value(scifile, 'dispname') == 'Grism_#10':
-            par['calibrations']['wavelengths']['reid_arxiv'] = 'not_alfosc_grism10.fits'
-        elif self.get_meta_value(scifile, 'dispname') == 'Grism_#11':
-            par['calibrations']['wavelengths']['reid_arxiv'] = 'not_alfosc_grism11.fits'
-        elif self.get_meta_value(scifile, 'dispname') == 'Grism_#17':
-            par['calibrations']['wavelengths']['reid_arxiv'] = 'not_alfosc_grism17.fits'
-        elif self.get_meta_value(scifile, 'dispname') == 'Grism_#18':
-            par['calibrations']['wavelengths']['reid_arxiv'] = 'not_alfosc_grism18.fits'
-            par['calibrations']['wavelengths']['lamps'] = ['HgI']
-        elif self.get_meta_value(scifile, 'dispname') == 'Grism_#19':
-            par['calibrations']['wavelengths']['reid_arxiv'] = 'not_alfosc_grism19.fits'
-            par['calibrations']['wavelengths']['lamps'] = ['HgI']
-        elif self.get_meta_value(scifile, 'dispname') == 'Grism_#20':
-            par['calibrations']['wavelengths']['reid_arxiv'] = 'not_alfosc_grism20.fits'
+            par['calibrations']['wavelengths']['reid_arxiv'] = 'd154_dfosc_grism8.fits'
+        elif self.get_meta_value(scifile, 'dispname') == 'Grism_#14':
+            par['calibrations']['wavelengths']['reid_arxiv'] = 'd154_dfosc_grism14.fits'
+        elif self.get_meta_value(scifile, 'dispname') == 'Grism_#15':
+            par['calibrations']['wavelengths']['reid_arxiv'] = 'd154_dfosc_grism15.fits'
         else:
             msgs.warn('d154_dfosc.py: YOU NEED TO ADD IN THE WAVELENGTH SOLUTION FOR THIS GRISM')
 
@@ -339,7 +331,7 @@ class DFOSCSpectrographVert(DFOSCSpectrograph):
     Child to handle Vertical slits for d154 DFOSC spectrograph
     """
     name = 'd154_dfosc_vert'
-    comment = 'Grisms 3, 5, 7, 9, 10, 11, 13, 14, 15, 16. For vertical slits only'
+    comment = 'Grisms 3, 5, 6, 7, 8, 14, 15. For vertical slits only'
 
     def get_detector_par(self, det, hdu=None):
         """
@@ -374,14 +366,16 @@ class DFOSCSpectrographVert(DFOSCSpectrograph):
             ronoise = None
         else:
             binning = self.get_meta_value(self.get_headarr(hdu), 'binning')
-            gain = np.atleast_1d(hdu[1].header['GAIN'])  # e-/ADU
-            ronoise = np.atleast_1d(hdu[1].header['RDNOISE'])  # e-
+            #gain = np.atleast_1d(hdu[1].header['GAIN'])  # e-/ADU
+            #ronoise = np.atleast_1d(hdu[1].header['RDNOISE'])  # e-
+            gain = np.atleast_1d(1.8)  # e-/ADU
+            ronoise = np.atleast_1d(9.0)
 
         # Detector 1
         detector_dict = dict(
             binning         = binning,
             det             = 1,
-            dataext         = 1,
+            dataext         = 0,  #changed from 1 to 0 b/c of header extension
             specaxis        = 1, #Vertical slits have horizontal spectral dispersion
             specflip        = False,
             spatflip        = False,
@@ -391,7 +385,7 @@ class DFOSCSpectrographVert(DFOSCSpectrograph):
             platescale      = 0.2138,
             mincounts       = -1e10,
             darkcurr        = 1.3,      # e-/pix/hr
-            saturation      = 700000.,  # ADU
+            saturation      = 600000.,  # ADU
             nonlinear       = 0.86,
             datasec         = np.atleast_1d('[{}:{},:]'.format(1, 2102)),  # Unbinned
             oscansec        = None,
