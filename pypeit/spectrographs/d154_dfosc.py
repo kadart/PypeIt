@@ -29,13 +29,14 @@ class DFOSCSpectrograph(spectrograph.Spectrograph):
     header_name = 'DFOSC_FASU'
     pypeline = 'MultiSlit'
     supported = True
-    comment = 'For horizontal slits only. Grisms 3, 5, 6, 7, 8, 14, 15, for DFOSC'
+    comment = 'For horizontal slits only. Grisms 3, 5, 7, 9, 10, 11, 13, 14, 15, 16 for DFOSC'
 
     def get_detector_par(self, det, hdu=None):
         """
         Return metadata for the selected detector.
 
-        Detector is CCD3 from E2V.
+        Detector data from `here
+        <http://www.not.iac.es/instruments/detectors/CCD14/>`__.
 
         .. warning::
 
@@ -111,6 +112,8 @@ class DFOSCSpectrograph(spectrograph.Spectrograph):
         par = super().default_pypeit_par()
 
         # Ignore PCA
+        par['rdx']['ignore_bad_headers'] = True
+
         par['calibrations']['slitedges']['sync_predict'] = 'nearest'
         par['calibrations']['slitedges']['bound_detector'] = True
         # Flats are sometimes quite ugly due to dust on the slit which leads to the erroneous detection of multiple slits. So set a higher edge_thresh and minimum_slit_gap.
@@ -170,8 +173,8 @@ class DFOSCSpectrograph(spectrograph.Spectrograph):
         self.meta['decker'] = dict(ext=0, card='DFAPRTNM')
         self.meta['binning'] = dict(card=None, compound=True)
 
-        #self.meta['mjd'] = dict(ext=0, card=None, compound=True)
-        self.meta['mjd'] = dict(ext=0, card='DATE-OBS')
+        self.meta['mjd'] = dict(ext=0, card=None, compound=True)
+        #self.meta['mjd'] = dict(ext=0, card='DATE-OBS')
         self.meta['exptime'] = dict(ext=0, card='EXPTIME')
         self.meta['airmass'] = dict(ext=0, card='AIRMASS')
         # Extras for config and frametyping
@@ -266,11 +269,13 @@ class DFOSCSpectrograph(spectrograph.Spectrograph):
         if ftype == 'science':
             return good_exp & (fitstbl['idname'] == 'OBJECT')
         if ftype == 'standard':
-            return good_exp & ((fitstbl['idname'] == 'STD') | (fitstbl['target'] == 'STD') | (fitstbl['target'] == 'STD,SLIT'))
+            return good_exp & (fitstbl['idname'] == 'STD')
+                               #| (fitstbl['target'] == 'STD') | (fitstbl['target'] == 'STD,SLIT'))
         if ftype == 'bias':
             return good_exp & (fitstbl['idname'] == 'BIAS')
         if ftype in ['pixelflat', 'trace', 'illumflat']:
-            return good_exp & (fitstbl['idname'] == 'FLAT,LAMP')
+            return good_exp & (fitstbl['idname'] == 'FLAT,SKY')
+            #return good_exp & (fitstbl['idname'] == 'FLAT,LAMP')
         if ftype in ['pinhole', 'dark']:
             # Don't type pinhole or dark frames
             return np.zeros(len(fitstbl), dtype=bool)
