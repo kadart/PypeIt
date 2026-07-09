@@ -3971,7 +3971,7 @@ class EdgeTracePar(ParSet):
     @staticmethod
     def valid_predict_modes():
         """Return the valid trace prediction modes."""
-        return ['pca', 'nearest', 'auto']
+        return ['pca', 'nearest', 'matched', 'auto']
 
     @staticmethod
     def valid_center_modes():
