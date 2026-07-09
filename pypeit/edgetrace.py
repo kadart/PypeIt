@@ -43,10 +43,9 @@ from matplotlib import pyplot as plt
 from matplotlib import ticker, rc
 
 from astropy import table
-
+from pypeit import pypmsgs
 from pypeit import log
 from pypeit import PypeItError
-from pypeit import PypeItBitMaskError
 from pypeit import utils
 from pypeit import sampling
 from pypeit import slittrace
@@ -771,25 +770,24 @@ class EdgeTraceSet(calibframe.CalibFrame):
             self.maskdesign_matching(debug=debug > 1)
             if debug > 0:
                 self.show(title='After matching to slit-mask design metadata.')
-            if (
-                self.edge_msk is None
-                or np.all(self.bitmask.flagged(self.edge_msk, self.bitmask.bad_flags))
-            ):
-                raise PypeItError(
-                    'All traces masked!  Problem with mask-design matching, which may be due to '
-                    'spurious edges.  Try changing the edge detection threshold (edge_thresh) and '
-                    'troubleshooting the problem using the pypeit_trace_edges script.'
-                )
+            if self.edge_msk is None or np.all(self.bitmask.flagged(self.edge_msk, self.bitmask.bad_flags)):
+                raise PypeItError('All traces masked!  Problem with mask-design matching, which may be '
+                           'due to spurious edges.  Try changing the edge detection threshold '
+                           '(edge_thresh) and troubleshooting the problem using the '
+                           'pypeit_trace_edges script.')
 
         if self.par['auto_pca'] and not self.can_pca() and not self.is_empty and self.par['sync_predict'] == 'pca':
             # TODO: This causes the code to fault. Maybe there's a way
             # to catch this earlier on?
-            log.warning(
-                'Sync predict cannot use PCA because too few edges were found.  If you are '
-                'reducing multislit or echelle data, you may need a better trace image or '
-                'change the mode used to predict traces (see below).  If you are reducing '
-                'longslit data, make sure to set the "sync_predict" parameter to "nearest".'
-            )
+            log.warning('Sync predict cannot use PCA because too few edges were found.  If you are '
+                       'reducing multislit or echelle data, you may need a better trace image or '
+                       'change the mode used to predict traces (see below).  If you are reducing '
+                       'longslit data, make sure to set the sync_predict parameter to nearest: '
+                       + '\n             ' +
+                       '    [calibrations]' + '\n             ' +
+                       '        [[slitedges]]' + '\n             ' +
+                       '            sync_predict = nearest')
+        #            self.par['sync_predict'] = 'nearest'
             self.success = False
         else:
             # Left-right synchronize the traces
@@ -1256,10 +1254,9 @@ class EdgeTraceSet(calibframe.CalibFrame):
         # Check the bitmasks
         hdr_bitmask = BitMask.from_header(hdu['SOBELSIG'].header)
         if chk_version and hdr_bitmask.bits != self.bitmask.bits:
-            raise PypeItBitMaskError(
-                'The bitmask in this fits file appear to be out of date!  Recreate this file by '
-                're-running the relevant script or set chk_version=False.'
-            )
+            raise PypeItError('The bitmask in this fits file appear to be out of date!  Recreate this '
+                       'file by re-running the relevant script or set chk_version=False.',
+                       cls='PypeItBitMaskError')
 
         return self
 
@@ -2582,7 +2579,7 @@ class EdgeTraceSet(calibframe.CalibFrame):
             sync_inserts = self.fully_masked_traces(flag='SYNCINSERT')
             for slc in short_slits:
                 # Remove the edges just before and after this region of short
-                # slits, if they inserted by the left-right syncing.
+                # slits, if they are inserted by the left-right syncing.
                 rmtrace[max(0,slc.start-1)] = sync_inserts[max(0,slc.start-1)]
                 rmtrace[min(self.ntrace-1, slc.stop)] = sync_inserts[min(self.ntrace-1, slc.stop)]
                 # Flip the sign of the edges (i.e., turn lefts into rights and
@@ -3974,8 +3971,8 @@ class EdgeTraceSet(calibframe.CalibFrame):
             return True
 
         # Edges are currently not synced, so check the input
-        if self.par['sync_predict'] not in ['pca', 'nearest', 'auto']:
-            raise PypeItError('Unknown trace mode: {0}'.format(self.par['sync_predict']))
+        if self.par['sync_predict'] not in EdgeTracePar.valid_predict_modes():
+            raise PypeItError(f"Unknown trace mode: {self.par['sync_predict']}")
         if self.par['sync_predict'] == 'pca' and self.pcatype is None:
             raise PypeItError('The PCA decomposition does not exist.  Either run self.build_pca or use '
                        'a different trace_mode.')
@@ -4006,7 +4003,9 @@ class EdgeTraceSet(calibframe.CalibFrame):
             # least two traces. Get rid of this test once satisfied
             # that this exception is never raised...
             if self.par['sync_predict'] == 'pca':
-                raise PypeItError('Coding error: this should not happen.')
+                raise PypeItError(
+                    'CODING ERROR: sync_predict cannot be pca if there are only 2 slit edges.'
+                )
             # Set the offset to add to the existing trace
             offset = self.par['det_buffer'] - np.amin(trace_cen[:,0]) if add_edge[0] \
                         else self.nspat - np.amax(trace_cen[:,0]) - self.par['det_buffer']
@@ -4035,28 +4034,44 @@ class EdgeTraceSet(calibframe.CalibFrame):
             trace_ref = self._get_reference_locations(trace_cen, add_edge)
 
             # Determine which sync_predict to use
-            if self.par['sync_predict'] == 'pca' \
-                    or (self.par['sync_predict'] == 'auto' and self.can_pca()):
-                _sync_predict = 'pca'
+            if self.par['sync_predict'] == 'auto':
+                _sync_predict = 'pca' if self.can_pca() else 'nearest'
+            elif self.par['sync_predict'] == 'pca':
+                if not self.can_pca():
+                    raise PypeItError('Form to use for traces added during syncing is set to PCA, but '
+                               'the PCA cannot be formed.  Set sync_predict to auto, nearest, or '
+                               'matched.')
+                _sync_predict = 'pca'         
             else:
-                _sync_predict = 'nearest'
+                _sync_predict = self.par['sync_predict']
 
             # Predict the traces either using the PCA or using the nearest slit edge
             if _sync_predict == 'pca':
                 trace_add = self.predict_traces(trace_ref[add_edge], side=side[add_edge])
-            elif _sync_predict == 'nearest':
-                # Index of trace nearest the ones to add
-                # TODO: Force it to use the nearest edge of the same side;
-                # i.e., when inserting a new right, force it to use the
-                # nearest right instead of the nearest left?
-                nearest = utils.nearest_unmasked(np.ma.MaskedArray(trace_ref, mask=add_edge))
+            elif _sync_predict in ['nearest', 'matched']:
+                # Index of trace to use as the form of the new trace.
+                if _sync_predict == 'nearest':
+                    # Find the index of the trace nearest the ones to add
+                    # TODO: Force it to use the nearest edge of the same side;
+                    # i.e., when inserting a new right, force it to use the
+                    # nearest right instead of the nearest left?
+                    form_indx = utils.nearest_unmasked(np.ma.MaskedArray(trace_ref, mask=add_edge))
+                else:
+                    # Find the index of the trace of the relevant left-right partner
+                    form_indx = np.arange(add_edge.size).reshape(-1,2)[:,::-1].ravel()
                 # Indices of the original traces
                 indx = np.zeros(len(add_edge), dtype=int)
                 indx[np.logical_not(add_edge)] = np.arange(self.ntrace)
+
+
                 # Offset the original traces by a constant based on the
                 # reference trace position to construct the new traces.
-                trace_add = trace_cen[:,indx[nearest[add_edge]]] + trace_ref[add_edge] \
-                                - trace_ref[nearest[add_edge]]
+                #   - indx[form_indx[add_edge]]: Selects the indices of the traces
+                #     to use as the form of the new trace.
+                #   - trace_ref[add_edge]: Theses are the reference locations of
+                #     the tract at "reference_row"
+                trace_add = trace_cen[:,indx[form_indx[add_edge]]] + trace_ref[add_edge] \
+                                - trace_ref[form_indx[add_edge]]
 
             # Insert the new traces and resort them spatially
             self.insert_traces(side[add_edge], trace_add, loc=add_indx[add_edge], mode='sync')
@@ -4466,10 +4481,10 @@ class EdgeTraceSet(calibframe.CalibFrame):
         self.maskfile = maskfiles[0] if isinstance(maskfiles, list) else maskfiles
         omodel_bspat, omodel_tspat, sortindx, self.slitmask = \
             self.spectrograph.get_maskdef_slitedges(
-                det=self.traceimg.detector.det, 
+                ccdnum=self.traceimg.detector.det, 
                 binning=self.traceimg.detector.binning, 
                 filename=maskfiles, 
-                trc_path=str(Path(self.traceimg.files[0]).parent),
+                trc_path = os.path.dirname(self.traceimg.files[0]),
                 debug=debug)
 
         if omodel_bspat[omodel_bspat!=-1].size < 3:
@@ -5740,15 +5755,6 @@ class EdgeTraceSet(calibframe.CalibFrame):
             _merged_designtab.rename_column('MASKDEF_ID_1', 'MASKDEF_ID')
             # One more item
             _posx_pa = float(self.slitmask.posx_pa)
-            # Use maskdef specmin and specmax
-            if self.maskfile is not None and self.par['maskdesign_trim']:
-                _maskfile = str(Path(self.traceimg.files[0]).parent / self.maskfile) \
-                            if not Path(self.maskfile).exists() else self.maskfile
-                specmin, specmax = self.spectrograph.maskdef_spec_minmax(maskfile=_maskfile,
-                                                                         maskdef_ids=_maskdef_id,
-                                                                         nspec=self.nspec,
-                                                                         binning=self.traceimg.detector.binning,
-                                                                         shift=self.par['maskdesign_trim_shift'])
         else:
             _maskdef_id = None
             _merged_designtab = None
@@ -5767,5 +5773,4 @@ class EdgeTraceSet(calibframe.CalibFrame):
         slits.copy_calib_internals(self)
 
         return slits
-
 
